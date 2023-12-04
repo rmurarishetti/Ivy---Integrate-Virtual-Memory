@@ -188,3 +188,63 @@ func (cm *CentralManager) handleWriteReq(msg Message){
 	cm.pgCopies[page] = []int{}
 	cm.cmWaitGroup.Done()
 }
+
+func (cm *CentralManager) handleIncomingMessages(){
+	for {
+		reqMsg := <- cm.msgReq
+		fmt.Printf("> [CM] Recieved Message of type %s from Node %d\n", reqMsg.msgType, reqMsg.senderId)
+		switch reqMsg.msgType {
+		case READREQ:
+			cm.handleReadReq(reqMsg)
+		case WRITEREQ:
+			cm.handleWriteReq(reqMsg)
+		}
+	}
+}
+
+func (node *Node) sendMessage(msg Message, recieverId int){
+	if recieverId != 0 {
+		fmt.Printf("> [Node %d] Sending Message of type %s to Node %d\n", node.id, msg.msgType, recieverId)
+	} else {
+		fmt.Printf("> [Node %d] Sending Message of type %s to CM\n", node.id, msg.msgType)
+	}
+	networkDelay := rand.Intn(300)
+	time.Sleep(time.Millisecond*time.Duration(networkDelay))
+	if recieverId == 0{
+		if msg.msgType == READREQ || msg.msgType == WRITEREQ {
+			node.cm.msgReq <- msg
+		} else if msg.msgType == INVALDIATEACK || msg.msgType == READACK || msg.msgType == WRITEACK {
+			node.cm.msgRes <- msg
+		}
+	} else {
+		node.nodes[recieverId].msgRes <- msg
+	}
+}
+
+func (node *Node) handleReadFwd(msg Message){
+	page:= msg.page
+	requesterId := msg.requesterId
+
+	responseMsg := createMessage(READPG, node.id, requesterId, page, node.pgContent[page])
+	go node.sendMessage(*responseMsg, requesterId)
+}
+
+func (node *Node) handleWriteFwd(msg Message){
+	page:= msg.page
+	requesterId := msg.requesterId
+
+	responseMsg := createMessage(WRITEPG, node.id, requesterId, page, node.pgContent[page])
+	delete(node.pgAccess, page)
+	//delete(node.pgContent, page)
+	go node.sendMessage(*responseMsg, requesterId)
+}
+
+func (node *Node) handleInvalidate(msg Message){
+	page:= msg.page
+	delete(node.pgAccess, page)
+	//delete(node.pgContent, page)
+
+	responseMsg := createMessage(INVALIDATE, node.id, msg.requesterId, page, "")
+	go node.sendMessage(*responseMsg, 0)
+}
+
