@@ -111,6 +111,13 @@ func createMessage(msgType MessageType, senderId int, requesterId int, page int,
 	return &msg
 }
 
+func (cm *CentralManager) PrintState() {
+	fmt.Printf("**************************************************\n  CENTRAL MANAGER STATE  \n**************************************************\n")
+	for page, owner := range cm.pgOwner {
+		fmt.Printf("> Page: %d, Owner: %d :: Access Type: %s , Copies: %d\n", page, owner, cm.nodes[owner].pgAccess[page], cm.pgCopies[page])
+	}
+}
+
 func (cm *CentralManager) sendMessage(msg Message, recieverId int) {
 	fmt.Printf("> [CM] Sending Message of type %s to Node %d\n", msg.msgType, recieverId)
 	networkDelay := rand.Intn(300)
@@ -142,12 +149,12 @@ func (cm *CentralManager) handleReadReq(msg Message) {
 	pgCopySet := cm.pgCopies[page]
 
 	replyMsg := createMessage(READFWD, 0, requesterId, page, "")
-	go cm.sendMessage(*replyMsg, pgOwner)
-	responseMsg := <-cm.msgRes
-	fmt.Printf("> [CM] Recieved Message of type %s from Node %d\n", responseMsg.msgType, responseMsg.senderId)
 	if !inArray(requesterId, pgCopySet) {
 		pgCopySet = append(pgCopySet, requesterId)
 	}
+	go cm.sendMessage(*replyMsg, pgOwner)
+	responseMsg := <-cm.msgRes
+	fmt.Printf("> [CM] Recieved Message of type %s from Node %d\n", responseMsg.msgType, responseMsg.senderId)
 	cm.pgCopies[page] = pgCopySet
 	cm.cmWaitGroup.Done()
 }
@@ -427,4 +434,18 @@ func main() {
 		go node.handleIncomingMessage()
 	}
 
+	// TESTING
+	nodeMap[2].executeRead(3)
+	nodeMap[1].executeWrite(3, "This is written by pid 1")
+	nodeMap[3].executeRead(3)
+	nodeMap[2].executeRead(3)
+	nodeMap[4].executeWrite(3, "This is written by pid 4")
+	nodeMap[1].executeRead(3)
+	nodeMap[2].executeRead(3)
+	nodeMap[3].executeRead(3)
+	nodeMap[5].executeRead(3)
+	nodeMap[9].executeWrite(3, "This is written by pid 9")
+	nodeMap[5].executeRead(3)
+	time.Sleep(2 * time.Second)
+	cm.PrintState()
 }
