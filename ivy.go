@@ -10,38 +10,38 @@ import (
 const TOTAL_NODES int = 10
 const TOTAL_DOCS int = 10
 
-type CentralManager struct{
-	nodes map[int]*Node
+type CentralManager struct {
+	nodes       map[int]*Node
 	cmWaitGroup *sync.WaitGroup
-	pgOwner map[int]int
-	pgCopies map[int][]int
-	msgReq chan Message
-	msgRes chan Message
+	pgOwner     map[int]int
+	pgCopies    map[int][]int
+	msgReq      chan Message
+	msgRes      chan Message
 }
 
 type Node struct {
-	id int
-	cm *CentralManager
-	nodes map[int]*Node
+	id            int
+	cm            *CentralManager
+	nodes         map[int]*Node
 	nodeWaitGroup *sync.WaitGroup
-	pgAccess map[int]Permission
-	pgContent map[int]string
-	writeToPg string
-	msgReq chan Message
-	msgRes chan Message
+	pgAccess      map[int]Permission
+	pgContent     map[int]string
+	writeToPg     string
+	msgReq        chan Message
+	msgRes        chan Message
 }
 
 type Message struct {
-	senderId int
+	senderId    int
 	requesterId int
-	msgType MessageType
-	page int
-	content string
+	msgType     MessageType
+	page        int
+	content     string
 }
 
 type MessageType int
 
-const(
+const (
 	//Node to Central Manager Message Types
 	READREQ MessageType = iota
 	WRITEREQ
@@ -50,18 +50,18 @@ const(
 	INVALDIATEACK
 	//Central Manager to Node Message Types
 	READFWD
-	WRITEFWD 
+	WRITEFWD
 	INVALIDATE
 	READOWNERNIL
 	WRITEOWNERNIL
 	//Node to Node
-	READPG 
-	WRITEPG 
+	READPG
+	WRITEPG
 )
 
 type Permission int
 
-const(
+const (
 	READONLY Permission = iota
 	READWRITE
 )
@@ -74,7 +74,7 @@ func (m MessageType) String() string {
 		"WRITEACK",
 		"INVALDIATEACK",
 		"READFWD",
-		"WRITEFWD", 
+		"WRITEFWD",
 		"INVALIDATE",
 		"READOWNERNIL",
 		"WRITEOWNERNIL",
@@ -99,22 +99,22 @@ func inArray(id int, array []int) bool {
 	return false
 }
 
-func createMessage(msgType MessageType, senderId int, requesterId int, page int, content string) *Message{
+func createMessage(msgType MessageType, senderId int, requesterId int, page int, content string) *Message {
 	msg := Message{
-		msgType: msgType,
-		senderId: senderId,
+		msgType:     msgType,
+		senderId:    senderId,
 		requesterId: requesterId,
-		page: page,
-		content: content,
+		page:        page,
+		content:     content,
 	}
 
 	return &msg
 }
 
-func (cm *CentralManager) sendMessage(msg Message, recieverId int){
+func (cm *CentralManager) sendMessage(msg Message, recieverId int) {
 	fmt.Printf("> [CM] Sending Message of type %s to Node %d\n", msg.msgType, recieverId)
 	networkDelay := rand.Intn(300)
-	time.Sleep(time.Millisecond*time.Duration(networkDelay))
+	time.Sleep(time.Millisecond * time.Duration(networkDelay))
 
 	recieverNode := cm.nodes[recieverId]
 	if msg.msgType == READOWNERNIL || msg.msgType == WRITEOWNERNIL {
@@ -124,15 +124,15 @@ func (cm *CentralManager) sendMessage(msg Message, recieverId int){
 	}
 }
 
-func (cm *CentralManager) handleReadReq(msg Message){
+func (cm *CentralManager) handleReadReq(msg Message) {
 	page := msg.page
 	requesterId := msg.requesterId
 
 	_, exists := cm.pgOwner[page]
-	if !exists{
+	if !exists {
 		replyMsg := createMessage(READOWNERNIL, 0, requesterId, page, "")
 		go cm.sendMessage(*replyMsg, requesterId)
-		responseMsg := <- cm.msgRes
+		responseMsg := <-cm.msgRes
 		fmt.Printf("> [CM] Recieved Message of type %s from Node %d\n", responseMsg.msgType, responseMsg.senderId)
 		cm.cmWaitGroup.Done()
 		return
@@ -143,24 +143,25 @@ func (cm *CentralManager) handleReadReq(msg Message){
 
 	replyMsg := createMessage(READFWD, 0, requesterId, page, "")
 	go cm.sendMessage(*replyMsg, pgOwner)
-	responseMsg := <- cm.msgRes
+	responseMsg := <-cm.msgRes
 	fmt.Printf("> [CM] Recieved Message of type %s from Node %d\n", responseMsg.msgType, responseMsg.senderId)
-	if !inArray(requesterId, pgCopySet){
+	if !inArray(requesterId, pgCopySet) {
 		pgCopySet = append(pgCopySet, requesterId)
 	}
 	cm.pgCopies[page] = pgCopySet
 	cm.cmWaitGroup.Done()
 }
 
-func (cm *CentralManager) handleWriteReq(msg Message){
+func (cm *CentralManager) handleWriteReq(msg Message) {
 	page := msg.page
 	requesterId := msg.requesterId
 
 	_, exists := cm.pgOwner[page]
-	if !exists{
+	if !exists {
+		cm.pgOwner[page] = requesterId
 		replyMsg := createMessage(WRITEOWNERNIL, 0, requesterId, page, "")
 		go cm.sendMessage(*replyMsg, requesterId)
-		responseMsg := <- cm.msgRes
+		responseMsg := <-cm.msgRes
 		fmt.Printf("> [CM] Recieved Message of type %s from Node %d\n", responseMsg.msgType, responseMsg.senderId)
 		cm.cmWaitGroup.Done()
 		return
@@ -172,26 +173,26 @@ func (cm *CentralManager) handleWriteReq(msg Message){
 	invalidationMsg := createMessage(INVALIDATE, 0, requesterId, page, "")
 	invalidationMsgCount := len(pgCopySet)
 
-	for _, nodeid := range pgCopySet{
+	for _, nodeid := range pgCopySet {
 		go cm.sendMessage(*invalidationMsg, nodeid)
 	}
 
-	for i:=0; i< invalidationMsgCount; i++ {
+	for i := 0; i < invalidationMsgCount; i++ {
 		<-cm.msgRes
 	}
 
 	responseMsg := createMessage(WRITEFWD, 0, requesterId, page, "")
 	go cm.sendMessage(*responseMsg, pgOwner)
-	writeAckMsg := <- cm.msgRes
+	writeAckMsg := <-cm.msgRes
 	fmt.Printf("> [CM] Recieved Message of type %s from Node %d\n", writeAckMsg.msgType, writeAckMsg.senderId)
 	cm.pgOwner[page] = requesterId
 	cm.pgCopies[page] = []int{}
 	cm.cmWaitGroup.Done()
 }
 
-func (cm *CentralManager) handleIncomingMessages(){
+func (cm *CentralManager) handleIncomingMessages() {
 	for {
-		reqMsg := <- cm.msgReq
+		reqMsg := <-cm.msgReq
 		fmt.Printf("> [CM] Recieved Message of type %s from Node %d\n", reqMsg.msgType, reqMsg.senderId)
 		switch reqMsg.msgType {
 		case READREQ:
@@ -202,15 +203,15 @@ func (cm *CentralManager) handleIncomingMessages(){
 	}
 }
 
-func (node *Node) sendMessage(msg Message, recieverId int){
+func (node *Node) sendMessage(msg Message, recieverId int) {
 	if recieverId != 0 {
 		fmt.Printf("> [Node %d] Sending Message of type %s to Node %d\n", node.id, msg.msgType, recieverId)
 	} else {
 		fmt.Printf("> [Node %d] Sending Message of type %s to CM\n", node.id, msg.msgType)
 	}
 	networkDelay := rand.Intn(300)
-	time.Sleep(time.Millisecond*time.Duration(networkDelay))
-	if recieverId == 0{
+	time.Sleep(time.Millisecond * time.Duration(networkDelay))
+	if recieverId == 0 {
 		if msg.msgType == READREQ || msg.msgType == WRITEREQ {
 			node.cm.msgReq <- msg
 		} else if msg.msgType == INVALDIATEACK || msg.msgType == READACK || msg.msgType == WRITEACK {
@@ -221,16 +222,16 @@ func (node *Node) sendMessage(msg Message, recieverId int){
 	}
 }
 
-func (node *Node) handleReadFwd(msg Message){
-	page:= msg.page
+func (node *Node) handleReadFwd(msg Message) {
+	page := msg.page
 	requesterId := msg.requesterId
 
 	responseMsg := createMessage(READPG, node.id, requesterId, page, node.pgContent[page])
 	go node.sendMessage(*responseMsg, requesterId)
 }
 
-func (node *Node) handleWriteFwd(msg Message){
-	page:= msg.page
+func (node *Node) handleWriteFwd(msg Message) {
+	page := msg.page
 	requesterId := msg.requesterId
 
 	responseMsg := createMessage(WRITEPG, node.id, requesterId, page, node.pgContent[page])
@@ -239,12 +240,57 @@ func (node *Node) handleWriteFwd(msg Message){
 	go node.sendMessage(*responseMsg, requesterId)
 }
 
-func (node *Node) handleInvalidate(msg Message){
-	page:= msg.page
+func (node *Node) handleInvalidate(msg Message) {
+	page := msg.page
 	delete(node.pgAccess, page)
 	//delete(node.pgContent, page)
 
 	responseMsg := createMessage(INVALIDATE, node.id, msg.requesterId, page, "")
 	go node.sendMessage(*responseMsg, 0)
 }
+
+func (node *Node) handleReadOwnerNil(msg Message) {
+	page := msg.page
+	fmt.Printf("> [Node %d] Recieved Message of type %s for Page %d\n", node.id, msg.msgType, page)
+	responseMsg := createMessage(READACK, node.id, msg.requesterId, page, "")
+	go node.sendMessage(*responseMsg, 0)
+}
+
+func (node *Node) handleWriteOwnerNil(msg Message) {
+	page := msg.page
+	fmt.Printf("> [Node %d] Recieved Message of type %s for Page %d\n", node.id, msg.msgType, page)
+
+	node.pgContent[page] = node.writeToPg
+	node.pgAccess[page] = READWRITE
+
+	responseMsg := createMessage(WRITEACK, node.id, msg.requesterId, page, "")
+	fmt.Printf("> [Node %d] Writing to Page %d\n Content:%s\n", node.id, page, node.writeToPg)
+	go node.sendMessage(*responseMsg, 0)
+}
+
+func (node *Node) handleReadPg(msg Message) {
+	page := msg.page
+	content := msg.content
+
+	node.pgAccess[page] = READONLY
+	node.pgContent[page] = content
+
+	fmt.Printf("> [Node %d] Recieved Page %d Content from Owner for Reading\n Content: %s\n", node.id, page, content)
+	responseMsg := createMessage(READACK, node.id, msg.requesterId, page, "")
+	go node.sendMessage(*responseMsg, 0)
+}
+
+func (node *Node) handleWritePg(msg Message) {
+	page := msg.page
+	content := msg.content
+
+	fmt.Printf("> [Node %d] Recieved Old Page %d Content from Owner for Writing\n Content: %s\n", node.id, page, content)
+	node.pgAccess[page] = READWRITE
+	node.pgContent[page] = node.writeToPg
+	fmt.Printf("> [Node %d] Writing to Page %d\n Content: %s\n", node.id, page, node.writeToPg)
+
+	responseMsg := createMessage(WRITEACK, node.id, msg.requesterId, page, "")
+	go node.sendMessage(*responseMsg, 0)
+}
+
 
