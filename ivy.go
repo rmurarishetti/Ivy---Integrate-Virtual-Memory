@@ -293,4 +293,70 @@ func (node *Node) handleWritePg(msg Message) {
 	go node.sendMessage(*responseMsg, 0)
 }
 
+func (node *Node) handleIncomingMessage(msg Message) {
+	for {
+		msg := <-node.msgReq
+		fmt.Printf("> [Node %d] Recieved Message of type %s from CM\n", node.id, msg.msgType)
+		switch msg.msgType {
+		case READFWD:
+			node.handleReadFwd(msg)
+		case WRITEFWD:
+			node.handleWriteFwd(msg)
+		case INVALIDATE:
+			node.handleInvalidate(msg)
+		}
+	}
+}
 
+func (node *Node) executeRead(page int) {
+	node.nodeWaitGroup.Add(1)
+	if _, exists := node.pgAccess[page]; !exists {
+		content := node.pgContent[page]
+		fmt.Printf("> [Node %d] Reading Cached Page %d Content: %s\n", node.id, page, content)
+		node.nodeWaitGroup.Done()
+		return
+	}
+
+	readReqMsg := createMessage(READREQ, node.id, node.id, page, "")
+	go node.sendMessage(*readReqMsg, 0)
+
+	msg := <-node.msgRes
+	switch msg.msgType {
+	case READOWNERNIL:
+		node.handleReadOwnerNil(msg)
+	case READPG:
+		node.handleReadPg(msg)
+	}
+}
+
+func (node *Node) executeWrite(page int, content string) {
+	node.nodeWaitGroup.Add(1)
+	if accessType, exists := node.pgAccess[page]; exists {
+		if accessType == READWRITE && node.pgContent[page] == content {
+			fmt.Printf("> [Node %d] Content is same as what is trying to be written for Page %d\n", node.id, page)
+			node.nodeWaitGroup.Done()
+			return
+		} else {
+			node.writeToPg = content
+			node.pgAccess[page] = READWRITE
+			node.pgContent[page] = node.writeToPg
+			fmt.Printf("> [Node %d] Writing to Page %d\n Content: %s\n", node.id, page, node.writeToPg)
+
+			responseMsg := createMessage(WRITEACK, node.id, node.id, page, "")
+			go node.sendMessage(*responseMsg, 0)
+			return
+		}
+	}
+
+	node.writeToPg = content
+	writeReqMsg := createMessage(WRITEREQ, node.id, node.id, page, "")
+	go node.sendMessage(*writeReqMsg, 0)
+
+	msg := <-node.msgRes
+	switch msg.msgType {
+	case WRITEOWNERNIL:
+		node.handleWriteOwnerNil(msg)
+	case WRITEPG:
+		node.handleWritePg(msg)
+	}
+}
