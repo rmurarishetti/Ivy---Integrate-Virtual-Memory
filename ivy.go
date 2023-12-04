@@ -47,7 +47,7 @@ const (
 	WRITEREQ
 	READACK
 	WRITEACK
-	INVALDIATEACK
+	INVALIDATEACK
 	//Central Manager to Node Message Types
 	READFWD
 	WRITEFWD
@@ -72,7 +72,7 @@ func (m MessageType) String() string {
 		"WRITEREQ",
 		"READACK",
 		"WRITEACK",
-		"INVALDIATEACK",
+		"INVALIDATEACK",
 		"READFWD",
 		"WRITEFWD",
 		"INVALIDATE",
@@ -178,7 +178,8 @@ func (cm *CentralManager) handleWriteReq(msg Message) {
 	}
 
 	for i := 0; i < invalidationMsgCount; i++ {
-		<-cm.msgRes
+		msg := <-cm.msgRes
+		fmt.Printf("> [CM] Recieved Message of type %s from Node %d\n", msg.msgType, msg.senderId)
 	}
 
 	responseMsg := createMessage(WRITEFWD, 0, requesterId, page, "")
@@ -214,7 +215,7 @@ func (node *Node) sendMessage(msg Message, recieverId int) {
 	if recieverId == 0 {
 		if msg.msgType == READREQ || msg.msgType == WRITEREQ {
 			node.cm.msgReq <- msg
-		} else if msg.msgType == INVALDIATEACK || msg.msgType == READACK || msg.msgType == WRITEACK {
+		} else if msg.msgType == INVALIDATEACK || msg.msgType == READACK || msg.msgType == WRITEACK {
 			node.cm.msgRes <- msg
 		}
 	} else {
@@ -225,6 +226,11 @@ func (node *Node) sendMessage(msg Message, recieverId int) {
 func (node *Node) handleReadFwd(msg Message) {
 	page := msg.page
 	requesterId := msg.requesterId
+
+	fmt.Printf("> [Node %d] Current AccessType: %s for Page %d\n", node.id, node.pgAccess[page], page)
+	if node.pgAccess[page] == READWRITE {
+		node.pgAccess[page] = READONLY
+	}
 
 	responseMsg := createMessage(READPG, node.id, requesterId, page, node.pgContent[page])
 	go node.sendMessage(*responseMsg, requesterId)
@@ -245,7 +251,7 @@ func (node *Node) handleInvalidate(msg Message) {
 	delete(node.pgAccess, page)
 	//delete(node.pgContent, page)
 
-	responseMsg := createMessage(INVALIDATE, node.id, msg.requesterId, page, "")
+	responseMsg := createMessage(INVALIDATEACK, node.id, msg.requesterId, page, "")
 	go node.sendMessage(*responseMsg, 0)
 }
 
@@ -293,7 +299,7 @@ func (node *Node) handleWritePg(msg Message) {
 	go node.sendMessage(*responseMsg, 0)
 }
 
-func (node *Node) handleIncomingMessage(msg Message) {
+func (node *Node) handleIncomingMessage() {
 	for {
 		msg := <-node.msgReq
 		fmt.Printf("> [Node %d] Recieved Message of type %s from CM\n", node.id, msg.msgType)
@@ -310,7 +316,7 @@ func (node *Node) handleIncomingMessage(msg Message) {
 
 func (node *Node) executeRead(page int) {
 	node.nodeWaitGroup.Add(1)
-	if _, exists := node.pgAccess[page]; !exists {
+	if _, exists := node.pgAccess[page]; exists {
 		content := node.pgContent[page]
 		fmt.Printf("> [Node %d] Reading Cached Page %d Content: %s\n", node.id, page, content)
 		node.nodeWaitGroup.Done()
@@ -336,7 +342,7 @@ func (node *Node) executeWrite(page int, content string) {
 			fmt.Printf("> [Node %d] Content is same as what is trying to be written for Page %d\n", node.id, page)
 			node.nodeWaitGroup.Done()
 			return
-		} else {
+		} else if accessType == READWRITE {
 			node.writeToPg = content
 			node.pgAccess[page] = READWRITE
 			node.pgContent[page] = node.writeToPg
@@ -359,4 +365,66 @@ func (node *Node) executeWrite(page int, content string) {
 	case WRITEPG:
 		node.handleWritePg(msg)
 	}
+}
+
+func NewNode(id int, cm CentralManager) *Node {
+	node := Node{
+		id:            id,
+		cm:            &cm,
+		nodes:         make(map[int]*Node),
+		nodeWaitGroup: &sync.WaitGroup{},
+		pgAccess:      make(map[int]Permission),
+		pgContent:     make(map[int]string),
+		writeToPg:     "",
+		msgReq:        make(chan Message),
+		msgRes:        make(chan Message),
+	}
+
+	return &node
+}
+
+func NewCM() *CentralManager {
+	cm := CentralManager{
+		nodes:       make(map[int]*Node),
+		cmWaitGroup: &sync.WaitGroup{},
+		pgOwner:     make(map[int]int),
+		pgCopies:    make(map[int][]int),
+		msgReq:      make(chan Message),
+		msgRes:      make(chan Message),
+	}
+	return &cm
+}
+
+func main() {
+	var wg sync.WaitGroup
+
+	fmt.Printf("**************************************************\n  IVY PROTOCOL  \n**************************************************\n")
+	fmt.Printf("The network will have %d Nodes.\n", TOTAL_NODES)
+
+	fmt.Printf("\n\nThe program will start soon....\nInstructions: The Program will be fully Automated, just watch the messages log to understand the flow. \n\n")
+
+	cm := NewCM()
+	cm.cmWaitGroup = &wg
+
+	nodeMap := make(map[int]*Node)
+	for i := 1; i <= TOTAL_NODES; i++ {
+		node := NewNode(i, *cm)
+		node.nodeWaitGroup = &wg
+		nodeMap[i] = node
+	}
+	cm.nodes = nodeMap
+
+	for _, nodei := range nodeMap {
+		for _, nodej := range nodeMap {
+			if nodei.id != nodej.id {
+				nodei.nodes[nodej.id] = nodej
+			}
+		}
+	}
+
+	go cm.handleIncomingMessages()
+	for _, node := range nodeMap {
+		go node.handleIncomingMessage()
+	}
+
 }
