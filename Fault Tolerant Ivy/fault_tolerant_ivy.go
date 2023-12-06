@@ -114,7 +114,7 @@ func (cm *CentralManager) PrintState() {
 }
 
 func (cm *CentralManager) sendMessage(msg Message, recieverId int) {
-	fmt.Printf("> [CM] Sending Message of type %s to Node %d\n", msg.msgType, recieverId)
+	fmt.Printf("> [CM] Sending Message of type %d to Node %d\n", msg.msgType, recieverId)
 	networkDelay := rand.Intn(300)
 	time.Sleep(time.Millisecond * time.Duration(networkDelay))
 
@@ -147,7 +147,7 @@ func (cm *CentralManager) handleReadReq(msg Message) {
 		replyMsg := createMessage(READOWNERNIL, 0, requesterId, page, "")
 		go cm.sendMessage(*replyMsg, requesterId)
 		responseMsg := <-cm.msgRes
-		fmt.Printf("> [CM] Recieved Message of type %s from Node %d\n", responseMsg.msgType, responseMsg.senderId)
+		fmt.Printf("> [CM] Recieved Message of type %d from Node %d\n", responseMsg.msgType, responseMsg.senderId)
 		cm.cmWaitGroup.Done()
 		return
 	}
@@ -161,7 +161,7 @@ func (cm *CentralManager) handleReadReq(msg Message) {
 	}
 	go cm.sendMessage(*replyMsg, pgOwner)
 	responseMsg := <-cm.msgRes
-	fmt.Printf("> [CM] Recieved Message of type %s from Node %d\n", responseMsg.msgType, responseMsg.senderId)
+	fmt.Printf("> [CM] Recieved Message of type %d from Node %d\n", responseMsg.msgType, responseMsg.senderId)
 	cm.pgCopies[page] = pgCopySet
 	cm.cmWaitGroup.Done()
 }
@@ -176,7 +176,7 @@ func (cm *CentralManager) handleWriteReq(msg Message) {
 		replyMsg := createMessage(WRITEOWNERNIL, 0, requesterId, page, "")
 		go cm.sendMessage(*replyMsg, requesterId)
 		responseMsg := <-cm.msgRes
-		fmt.Printf("> [CM] Recieved Message of type %s from Node %d\n", responseMsg.msgType, responseMsg.senderId)
+		fmt.Printf("> [CM] Recieved Message of type %d from Node %d\n", responseMsg.msgType, responseMsg.senderId)
 		cm.cmWaitGroup.Done()
 		return
 	}
@@ -193,13 +193,13 @@ func (cm *CentralManager) handleWriteReq(msg Message) {
 
 	for i := 0; i < invalidationMsgCount; i++ {
 		msg := <-cm.msgRes
-		fmt.Printf("> [CM] Recieved Message of type %s from Node %d\n", msg.msgType, msg.senderId)
+		fmt.Printf("> [CM] Recieved Message of type %d from Node %d\n", msg.msgType, msg.senderId)
 	}
 
 	responseMsg := createMessage(WRITEFWD, 0, requesterId, page, "")
 	go cm.sendMessage(*responseMsg, pgOwner)
 	writeAckMsg := <-cm.msgRes
-	fmt.Printf("> [CM] Recieved Message of type %s from Node %d\n", writeAckMsg.msgType, writeAckMsg.senderId)
+	fmt.Printf("> [CM] Recieved Message of type %d from Node %d\n", writeAckMsg.msgType, writeAckMsg.senderId)
 	cm.pgOwner[page] = requesterId
 	cm.pgCopies[page] = []int{}
 	cm.cmWaitGroup.Done()
@@ -219,7 +219,7 @@ func (cm *CentralManager) handleIncomingMessages() {
 	for {
 		select {
 		case reqMsg := <-cm.msgReq:
-			fmt.Printf("> [CM] Recieved Message of type %s from Node %d\n", reqMsg.msgType, reqMsg.senderId)
+			fmt.Printf("> [CM] Recieved Message of type %d from Node %d\n", reqMsg.msgType, reqMsg.senderId)
 			switch reqMsg.msgType {
 			case READREQ:
 				cm.handleReadReq(reqMsg)
@@ -238,9 +238,9 @@ func (cm *CentralManager) handleIncomingMessages() {
 
 func (node *Node) sendMessage(msg Message, recieverId int) {
 	if recieverId != 0 {
-		fmt.Printf("> [Node %d] Sending Message of type %s to Node %d\n", node.id, msg.msgType, recieverId)
+		fmt.Printf("> [Node %d] Sending Message of type %d to Node %d\n", node.id, msg.msgType, recieverId)
 	} else {
-		fmt.Printf("> [Node %d] Sending Message of type %s to CM\n", node.id, msg.msgType)
+		fmt.Printf("> [Node %d] Sending Message of type %d to CM\n", node.id, msg.msgType)
 	}
 	networkDelay := rand.Intn(300)
 	time.Sleep(time.Millisecond * time.Duration(networkDelay))
@@ -289,14 +289,14 @@ func (node *Node) handleInvalidate(msg Message) {
 
 func (node *Node) handleReadOwnerNil(msg Message) {
 	page := msg.page
-	fmt.Printf("> [Node %d] Recieved Message of type %s for Page %d\n", node.id, msg.msgType, page)
+	fmt.Printf("> [Node %d] Recieved Message of type %d for Page %d\n", node.id, msg.msgType, page)
 	responseMsg := createMessage(READACK, node.id, msg.requesterId, page, "")
 	go node.sendMessage(*responseMsg, 0)
 }
 
 func (node *Node) handleWriteOwnerNil(msg Message) {
 	page := msg.page
-	fmt.Printf("> [Node %d] Recieved Message of type %s for Page %d\n", node.id, msg.msgType, page)
+	fmt.Printf("> [Node %d] Recieved Message of type %d for Page %d\n", node.id, msg.msgType, page)
 
 	node.pgContent[page] = node.writeToPg
 	node.pgAccess[page] = READWRITE
@@ -338,7 +338,7 @@ func (node *Node) handleIncomingMessage() {
 	for {
 		select {
 		case msg := <-node.msgReq:
-			fmt.Printf("> [Node %d] Recieved Message of type %s from CM\n", node.id, msg.msgType)
+			fmt.Printf("> [Node %d] Recieved Message of type %d from CM\n", node.id, msg.msgType)
 			switch msg.msgType {
 			case READFWD:
 				node.handleReadFwd(msg)
@@ -412,10 +412,11 @@ func (node *Node) executeWrite(page int, content string) {
 	}
 }
 
-func NewNode(id int, cm CentralManager) *Node {
+func NewNode(id int, cm CentralManager, backup CentralManager) *Node {
 	node := Node{
 		id:            id,
 		cm:            &cm,
+		backup:        &backup,
 		nodes:         make(map[int]*Node),
 		nodeWaitGroup: &sync.WaitGroup{},
 		pgAccess:      make(map[int]Permission),
@@ -423,6 +424,7 @@ func NewNode(id int, cm CentralManager) *Node {
 		writeToPg:     "",
 		msgReq:        make(chan Message),
 		msgRes:        make(chan Message),
+		cmKillChan:    make(chan int),
 	}
 
 	return &node
@@ -436,17 +438,20 @@ func NewCM() *CentralManager {
 		pgCopies:    make(map[int][]int),
 		msgReq:      make(chan Message),
 		msgRes:      make(chan Message),
+		killChan:    make(chan int),
+		cmChan:      make(chan MetaMsg),
 	}
 	return &cm
 }
 
-// func periodicFunction() {
-// 	for {
-// 		// Your periodic task goes here
-// 		fmt.Println("Executing periodic task...")
-// 		time.Sleep(5 * time.Second) // Adjust the duration as needed
-// 	}
-// }
+func (cm *CentralManager) periodicFunction(reciever *CentralManager) {
+	for {
+		// Your periodic task goes here
+		//fmt.Println("Executing periodic task...")
+		cm.sendMetaMessage(reciever)
+		time.Sleep(1 * time.Second) // Adjust the duration as needed
+	}
+}
 
 // func main() {
 // 	go periodicFunction()
@@ -456,3 +461,69 @@ func NewCM() *CentralManager {
 // 	// Sleep for a while to keep the program running
 // 	time.Sleep(30 * time.Second)
 // }
+
+func main() {
+	var wg sync.WaitGroup
+
+	fmt.Printf("**************************************************\n FAULT TOLERANT IVY PROTOCOL  \n**************************************************\n")
+	fmt.Printf("The network will have %d Nodes.\n", TOTAL_NODES)
+
+	fmt.Printf("\n\nThe program will start soon....\nInstructions: The Program will be fully Automated, just watch the messages log to understand the flow. \n\n")
+
+	cm := NewCM()
+	cm.cmWaitGroup = &wg
+
+	backupCM := NewCM()
+	backupCM.cmWaitGroup = &wg
+
+	nodeMap := make(map[int]*Node)
+	for i := 1; i <= TOTAL_NODES; i++ {
+		node := NewNode(i, *cm, *backupCM)
+		node.nodeWaitGroup = &wg
+		nodeMap[i] = node
+	}
+	cm.nodes = nodeMap
+
+	for _, nodei := range nodeMap {
+		for _, nodej := range nodeMap {
+			if nodei.id != nodej.id {
+				nodei.nodes[nodej.id] = nodej
+			}
+		}
+	}
+
+	go cm.handleIncomingMessages()
+	go backupCM.handleIncomingMessages()
+	//go cm.sendMetaMessage(backupCM)
+	for _, node := range nodeMap {
+		go node.handleIncomingMessage()
+	}
+
+	go func() {
+		
+			// Your main program logic goes here
+
+			// TESTING
+			nodeMap[2].executeRead(3)
+			nodeMap[1].executeWrite(3, "This is written by pid 1")
+			nodeMap[3].executeRead(3)
+			nodeMap[2].executeRead(3)
+			nodeMap[4].executeWrite(3, "This is written by pid 4")
+			nodeMap[1].executeRead(3)
+			nodeMap[2].executeRead(3)
+			nodeMap[3].executeRead(3)
+			nodeMap[5].executeRead(3)
+			nodeMap[9].executeWrite(3, "This is written by pid 9")
+			nodeMap[5].executeRead(3)
+			time.Sleep(2 * time.Second)
+			//cm.PrintState()
+		
+	}()
+	go cm.periodicFunction(backupCM)
+	time.Sleep(5 * time.Second)
+	// cm.PrintState()
+
+	cm.PrintState()
+	backupCM.PrintState()
+	wg.Wait()
+}
