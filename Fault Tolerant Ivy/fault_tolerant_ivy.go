@@ -486,7 +486,7 @@ func (cm *CentralManager) periodicFunction(reciever *CentralManager) {
 			fmt.Printf("> [CM %d] Waiting for MetaMsg from Incumbent CM %d\n", cm.id, reciever.id)
 		}
 
-		time.Sleep(1 * time.Second) // Adjust the duration as needed
+		time.Sleep(100 * time.Millisecond) // Adjust the duration as needed
 	}
 }
 
