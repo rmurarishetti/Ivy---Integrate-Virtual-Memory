@@ -3,11 +3,12 @@ package main
 import (
 	"fmt"
 	"math/rand"
+	"os"
 	"sync"
 	"time"
 )
 
-const TOTAL_NODES int = 10
+const TOTAL_NODES int = 2
 const TOTAL_DOCS int = 10
 
 type CentralManager struct {
@@ -490,14 +491,38 @@ func (cm *CentralManager) periodicFunction(reciever *CentralManager) {
 	}
 }
 
-// func main() {
-// 	go periodicFunction()
+func baselineBenchmark(nodeMap map[int]*Node, cm CentralManager, backupCM CentralManager, wg sync.WaitGroup) {
 
-// 	// Your main program logic goes here
-
-// 	// Sleep for a while to keep the program running
-// 	time.Sleep(30 * time.Second)
-// }
+	start := time.Now()
+	for i := 1; i <= TOTAL_NODES; i++ {
+		nodeMap[i].executeRead(i)
+	}
+	for i := 1; i <= TOTAL_NODES; i++ {
+		toWrite := fmt.Sprintf("This is written by node id %d", i)
+		nodeMap[i].executeWrite(i, toWrite)
+	}
+	for i := 1; i <= TOTAL_NODES; i++ {
+		temp := i + 1
+		temp %= (TOTAL_DOCS + 1)
+		if temp == 0 {
+			temp += 1
+		}
+		nodeMap[i].executeRead(temp)
+	}
+	for i := 1; i <= TOTAL_NODES; i++ {
+		toWrite := fmt.Sprintf("This is written by pid %d", i)
+		temp := i + 1
+		temp %= (TOTAL_DOCS + 1)
+		if temp == 0 {
+			temp += 1
+		}
+		nodeMap[i].executeWrite(temp, toWrite)
+	}
+	cm.PrintState()
+	wg.Wait()
+	end := time.Now()
+	fmt.Printf("Time taken = %.2f seconds \n", end.Sub(start).Seconds())
+}
 
 func main() {
 	var wg sync.WaitGroup
@@ -505,7 +530,7 @@ func main() {
 	fmt.Printf("**************************************************\n FAULT TOLERANT IVY PROTOCOL  \n**************************************************\n")
 	fmt.Printf("The network will have %d Nodes.\n", TOTAL_NODES)
 
-	fmt.Printf("\n\nThe program will start soon....\nInstructions: The Program will be fully Automated, just watch the messages log to understand the flow. \n\n")
+	fmt.Printf("\n\nThe program will start soon....\nInstructions:\n\nType 1 to Simulate BASELINE FAULT FREE BENCHMARK\nor 2 to Simulate 2 PRIMARY CM FAULT (DEAD) BENCHMARK\nor 3 to TBD\nor 4 to Simulate a TBD\nor Type EXIT to exit:\n\n")
 
 	cm := NewCM(0, INCUMBENT)
 	cm.cmWaitGroup = &wg
@@ -531,7 +556,7 @@ func main() {
 
 	go cm.handleIncomingMessages()
 	go backupCM.handleIncomingMessages()
-	//go cm.sendMetaMessage(backupCM)
+
 	for _, node := range nodeMap {
 		go node.handleIncomingMessage()
 	}
@@ -539,60 +564,218 @@ func main() {
 	go backupCM.periodicFunction(cm)
 	go cm.periodicFunction(backupCM)
 
-	go func() {
 
-		// Your main program logic goes here
-
-		// TESTING
-		nodeMap[2].executeRead(3)
-		nodeMap[1].executeWrite(3, "This is written by pid 1")
-		nodeMap[3].executeRead(3)
-		nodeMap[2].executeRead(3)
-		nodeMap[4].executeWrite(3, "This is written by pid 4")
-		fmt.Printf("**************************************************\n KILLING PRIMARY 0  \n**************************************************\n")
-		cm.killChan <- 1
-		for _, node := range nodeMap {
-			node.cmKillChan <- 1
-		}
-		time.Sleep(100 * time.Millisecond)
-		// Make CM Realise its no longer Incumbent
-		go cm.periodicFunction(backupCM)
-		// Make Dead CM relive by listening to msgs again
-		go cm.handleIncomingMessages()
-
-		nodeMap[1].executeRead(3)
-		nodeMap[9].executeWrite(3, "This is written by pid 9")
-		nodeMap[5].executeRead(3)
-		fmt.Printf("**************************************************\n KILLING PRIMARY 1  \n**************************************************\n")
-		backupCM.killChan <- 1
-		cm.PrintState()
-		for _, node := range nodeMap {
-			node.cmKillChan <- 1
-		}
-		time.Sleep(100 * time.Millisecond)
-		// Make Backup CM Realise its no longer Incumbent
-		go backupCM.periodicFunction(cm)
-		// Make Dead Backup CM relive by listening to msgs again
-		go backupCM.handleIncomingMessages()
-
-		nodeMap[2].executeRead(3)
-		nodeMap[3].executeRead(3)
-		nodeMap[1].executeWrite(3, "This is written by pid 1")
-		nodeMap[5].executeRead(3)
-		nodeMap[3].executeRead(3)
-		nodeMap[8].executeRead(3)
-		nodeMap[6].executeRead(3)
-		fmt.Println("Reached this line now")
-		nodeMap[9].executeRead(3)
-		wg.Wait()
-		fmt.Printf("**************************************************\n CONCLUSION  \n**************************************************\n")
-		cm.PrintState()
-		backupCM.PrintState()
-
-	}()
-	//fmt.Printf("**************************************************\n WHERE DOES THIS HAPPEN  \n**************************************************\n")
+	
+	
 	time.Sleep(2 * time.Second)
-	// cm.PrintState()
-	wg.Wait()
+	random := ""
+	for {
+		//fmt.Printf("\n\nType 1 to Simulate BASELINE FAULT FREE BENCHMARK\nor 2 to PRIMARY CM FAULT (DEAD) BENCHMARK\nor 3 to Simulate Coordinator Failure During Announcement\nor 4 to Simulate a Common Node Failure During Announcement\nor 5 to Simulate Silent Node Departure\nor Type EXIT to exit:")
+		fmt.Scanf("%s", &random)
+
+		if random == "1" {
+
+			fmt.Printf("**************************************************\n BASELINE FAULT FREE BENCHMARK  \n**************************************************\n")
+			go baselineBenchmark(nodeMap, *cm, *backupCM, wg)
+			time.Sleep(time.Duration(1) * time.Second)
+			wg.Wait()
+			os.Exit(0)
+		}
+
+		if random == "2" {
+			fmt.Printf("**************************************************\n PRIMARY CM FAULT (DEAD) BENCHMARK  \n**************************************************\n")
+			go func() {
+
+				// Your main program logic goes here
+				start := time.Now()
+				// TESTING
+				for i := 1; i <= TOTAL_NODES; i++ {
+					nodeMap[i].executeRead(i)
+				}
+				for i := 1; i <= TOTAL_NODES; i++ {
+					toWrite := fmt.Sprintf("This is written by node id %d", i)
+					nodeMap[i].executeWrite(i, toWrite)
+				}
+				fmt.Printf("**************************************************\n KILLING PRIMARY 0  \n**************************************************\n")
+				cm.killChan <- 1
+				for _, node := range nodeMap {
+					node.cmKillChan <- 1
+				}
+				time.Sleep(100 * time.Millisecond)
+				// Make CM Realise its no longer Incumbent
+				go cm.periodicFunction(backupCM)
+				// Make Dead CM relive by listening to msgs again
+				go cm.handleIncomingMessages()
+		
+				for i := 1; i <= TOTAL_NODES; i++ {
+					temp := i + 1
+					temp %= (TOTAL_DOCS + 1)
+					if temp == 0 {
+						temp += 1
+					}
+					nodeMap[i].executeRead(temp)
+				}
+				for i := 1; i <= TOTAL_NODES; i++ {
+					toWrite := fmt.Sprintf("This is written by pid %d", i)
+					temp := i + 1
+					temp %= (TOTAL_DOCS + 1)
+					if temp == 0 {
+						temp += 1
+					}
+					nodeMap[i].executeWrite(temp, toWrite)
+				}
+				wg.Wait()
+				end := time.Now()
+				time.Sleep(time.Duration(1) * time.Second)
+				fmt.Printf("**************************************************\n CONCLUSION  \n**************************************************\n")
+				cm.PrintState()
+				backupCM.PrintState()
+				fmt.Printf("Time taken = %.2f seconds \n", end.Sub(start).Seconds())
+				os.Exit(0)
+			}()
+		}
+
+		if random == "3" {
+			fmt.Printf("**************************************************\n PRIMARY CM FAULT (DEAD AND RESTART) BENCHMARK  \n**************************************************\n")
+			go func() {
+
+				// Your main program logic goes here
+				start := time.Now()
+				// TESTING
+				for i := 1; i <= TOTAL_NODES; i++ {
+					nodeMap[i].executeRead(i)
+				}
+				for i := 1; i <= TOTAL_NODES; i++ {
+					toWrite := fmt.Sprintf("This is written by node id %d", i)
+					nodeMap[i].executeWrite(i, toWrite)
+				}
+				fmt.Printf("**************************************************\n KILLING PRIMARY 0  \n**************************************************\n")
+				cm.killChan <- 1
+				for _, node := range nodeMap {
+					node.cmKillChan <- 1
+				}
+				time.Sleep(100 * time.Millisecond)
+				// Make CM Realise its no longer Incumbent
+				go cm.periodicFunction(backupCM)
+				// Make Dead CM relive by listening to msgs again
+				go cm.handleIncomingMessages()
+	
+				fmt.Printf("**************************************************\n KILLING PRIMARY 1  \n**************************************************\n")
+				backupCM.killChan <- 1
+				cm.PrintState()
+				for _, node := range nodeMap {
+					node.cmKillChan <- 1
+				}
+				time.Sleep(100 * time.Millisecond)
+				// Make Backup CM Realise its no longer Incumbent
+				go backupCM.periodicFunction(cm)
+				// Make Dead Backup CM relive by listening to msgs again
+				go backupCM.handleIncomingMessages()
+		
+				for i := 1; i <= TOTAL_NODES; i++ {
+					temp := i + 1
+					temp %= (TOTAL_DOCS + 1)
+					if temp == 0 {
+						temp += 1
+					}
+					nodeMap[i].executeRead(temp)
+				}
+				for i := 1; i <= TOTAL_NODES; i++ {
+					toWrite := fmt.Sprintf("This is written by pid %d", i)
+					temp := i + 1
+					temp %= (TOTAL_DOCS + 1)
+					if temp == 0 {
+						temp += 1
+					}
+					nodeMap[i].executeWrite(temp, toWrite)
+				}
+				wg.Wait()
+				end := time.Now()
+				time.Sleep(time.Duration(1) * time.Second)
+				fmt.Printf("**************************************************\n CONCLUSION  \n**************************************************\n")
+				cm.PrintState()
+				backupCM.PrintState()
+				fmt.Printf("Time taken = %.2f seconds \n", end.Sub(start).Seconds())
+				os.Exit(0)
+			}()
+			// wg.Wait()
+			// os.Exit(0)
+		}
+
+		// if random == "4" {
+		// 	killCommonBullyDuringSimBest(clientMap)
+		// 	time.Sleep(time.Duration(TIMEOUT*(NUMBER_OF_CLIENTS-1)+1) * time.Second)
+
+		// }
+
+		// if random == "5" {
+		// 	silentNodeDeparture(clientMap)
+		// 	time.Sleep(time.Duration(TIMEOUT*(NUMBER_OF_CLIENTS-1)+1) * time.Second)
+
+		// }
+
+		if random == "EXIT" {
+			os.Exit(0)
+		}
+	}
+	fmt.Scanf("%s", &random)
+	//cm.PrintState()
+	//wg.Wait()
+	//end := time.Now()
+	//cm.PrintState()
+	//time.Sleep(time.Second * 1)
+	//fmt.Printf("Time taken = %.2f seconds \n", end.Sub(start).Seconds())
 
 }
+
+	// go func() {
+
+	// 	// Your main program logic goes here
+
+	// 	// TESTING
+	// 	nodeMap[2].executeRead(3)
+	// 	nodeMap[1].executeWrite(3, "This is written by pid 1")
+	// 	nodeMap[3].executeRead(3)
+	// 	nodeMap[2].executeRead(3)
+	// 	nodeMap[4].executeWrite(3, "This is written by pid 4")
+	// 	fmt.Printf("**************************************************\n KILLING PRIMARY 0  \n**************************************************\n")
+	// 	cm.killChan <- 1
+	// 	for _, node := range nodeMap {
+	// 		node.cmKillChan <- 1
+	// 	}
+	// 	time.Sleep(100 * time.Millisecond)
+	// 	// Make CM Realise its no longer Incumbent
+	// 	go cm.periodicFunction(backupCM)
+	// 	// Make Dead CM relive by listening to msgs again
+	// 	go cm.handleIncomingMessages()
+
+	// 	nodeMap[1].executeRead(3)
+	// 	nodeMap[9].executeWrite(3, "This is written by pid 9")
+	// 	nodeMap[5].executeRead(3)
+	// 	fmt.Printf("**************************************************\n KILLING PRIMARY 1  \n**************************************************\n")
+	// 	backupCM.killChan <- 1
+	// 	cm.PrintState()
+	// 	for _, node := range nodeMap {
+	// 		node.cmKillChan <- 1
+	// 	}
+	// 	time.Sleep(100 * time.Millisecond)
+	// 	// Make Backup CM Realise its no longer Incumbent
+	// 	go backupCM.periodicFunction(cm)
+	// 	// Make Dead Backup CM relive by listening to msgs again
+	// 	go backupCM.handleIncomingMessages()
+
+	// 	nodeMap[2].executeRead(3)
+	// 	nodeMap[3].executeRead(3)
+	// 	nodeMap[1].executeWrite(3, "This is written by pid 1")
+	// 	nodeMap[5].executeRead(3)
+	// 	nodeMap[3].executeRead(3)
+	// 	nodeMap[8].executeRead(3)
+	// 	nodeMap[6].executeRead(3)
+	// 	fmt.Println("Reached this line now")
+	// 	nodeMap[9].executeRead(3)
+	// 	wg.Wait()
+	// 	fmt.Printf("**************************************************\n CONCLUSION  \n**************************************************\n")
+	// 	cm.PrintState()
+	// 	backupCM.PrintState()
+
+	// }()

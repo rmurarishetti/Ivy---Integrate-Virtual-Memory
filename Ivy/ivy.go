@@ -120,7 +120,7 @@ func (cm *CentralManager) PrintState() {
 
 func (cm *CentralManager) sendMessage(msg Message, recieverId int) {
 	fmt.Printf("> [CM] Sending Message of type %s to Node %d\n", msg.msgType, recieverId)
-	networkDelay := rand.Intn(300)
+	networkDelay := rand.Intn(50)
 	time.Sleep(time.Millisecond * time.Duration(networkDelay))
 
 	recieverNode := cm.nodes[recieverId]
@@ -217,7 +217,7 @@ func (node *Node) sendMessage(msg Message, recieverId int) {
 	} else {
 		fmt.Printf("> [Node %d] Sending Message of type %s to CM\n", node.id, msg.msgType)
 	}
-	networkDelay := rand.Intn(300)
+	networkDelay := rand.Intn(50)
 	time.Sleep(time.Millisecond * time.Duration(networkDelay))
 	if recieverId == 0 {
 		if msg.msgType == READREQ || msg.msgType == WRITEREQ {
@@ -434,18 +434,35 @@ func main() {
 		go node.handleIncomingMessage()
 	}
 
-	// TESTING
-	nodeMap[2].executeRead(3)
-	nodeMap[1].executeWrite(3, "This is written by pid 1")
-	nodeMap[3].executeRead(3)
-	nodeMap[2].executeRead(3)
-	nodeMap[4].executeWrite(3, "This is written by pid 4")
-	nodeMap[1].executeRead(3)
-	nodeMap[2].executeRead(3)
-	nodeMap[3].executeRead(3)
-	nodeMap[5].executeRead(3)
-	nodeMap[9].executeWrite(3, "This is written by pid 9")
-	nodeMap[5].executeRead(3)
-	time.Sleep(2 * time.Second)
+	start := time.Now()
+	for i := 1; i <= TOTAL_NODES; i++ {
+		nodeMap[i].executeRead(i)
+	}
+	for i := 1; i <= TOTAL_NODES; i++ {
+		toWrite := fmt.Sprintf("This is written by node id %d", i)
+		nodeMap[i].executeWrite(i, toWrite)
+	}
+	for i := 1; i <= TOTAL_NODES; i++ {
+		temp := i + 1
+		temp %= (TOTAL_DOCS + 1)
+		if temp == 0 {
+			temp += 1
+		}
+		nodeMap[i].executeRead(temp)
+	}
+	for i := 1; i <= TOTAL_NODES; i++ {
+		toWrite := fmt.Sprintf("This is written by pid %d", i)
+		temp := i + 1
+		temp %= (TOTAL_DOCS + 1)
+		if temp == 0 {
+			temp += 1
+		}
+		nodeMap[i].executeWrite(temp, toWrite)
+		//nodeMap[i].executeRead((temp+1)%TOTAL_DOCS)
+	}
+	wg.Wait()
+	end := time.Now()
 	cm.PrintState()
+	time.Sleep(time.Second * 1)
+	fmt.Printf("Time taken = %.2f seconds \n", end.Sub(start).Seconds())
 }
