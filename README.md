@@ -62,7 +62,7 @@ Time taken = 0.93 seconds
 ```
 
 ### 📚 Problem 2: 
-#### 📝 Implementing Ricart and Agarwala's Optimized Lamport's Shared Priority Queue Algorithm for Distributed Mutual Exclusion
+#### 📝 Implementing Fault Tolerant Ivy Protocol for Sequential Read and Write Access to a Shared File
 To run the program, run the following command in the terminal:
 ```
 cd Fault\ Tolerant\ Ivy/
@@ -219,6 +219,8 @@ In the case of a fault, the nodes are notified of the CM's failure through a cha
 #### 📝 Experimentation and Performance Analysis of the Protocols 
 The performance analysis of the 2 algorithms has been done by varying the number of nodes in the network with differing scenarios as described in the specification sheet. 
 
+- All Runs are 10 Docs.
+- Each message has a random delay between 0 and 50 ms associated with to simulate real network delay.
 
 
 The results can be found in the Benchmarks PDF in the root directory.
