@@ -8,7 +8,7 @@ import (
 	"time"
 )
 
-const TOTAL_NODES int = 10
+const TOTAL_NODES int = 3
 const TOTAL_DOCS int = 10
 
 /*
@@ -604,8 +604,10 @@ func baselineBenchmark(nodeMap map[int]*Node, cm CentralManager, backupCM Centra
 		}
 		nodeMap[i].executeWrite(temp, toWrite)
 	}
-	cm.PrintState()
 	wg.Wait()
+	fmt.Printf("**************************************************\n CONCLUSION  \n**************************************************\n")
+	cm.PrintState()
+	backupCM.PrintState()
 	end := time.Now()
 	fmt.Printf("Time taken = %.2f seconds \n", end.Sub(start).Seconds())
 }

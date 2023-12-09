@@ -7,7 +7,7 @@ import (
 	"time"
 )
 
-const TOTAL_NODES int = 10
+const TOTAL_NODES int = 7
 const TOTAL_DOCS int = 10
 
 /*
