@@ -69,3 +69,47 @@ b. Benchmarking Results
 8 Node, 10 Docs : 2.88 seconds
 9 Node, 10 Docs : 3.11 seconds
 10 Node, 10 Docs : 3.79 seconds
+
+q6. Performance Comparison between Non Fault Tolerant Ivy and Fault Tolerant Ivy with more than 1 Fault in Primary CM and Restart
+
+It will not be fair to compare the performance of non fault tolerant Ivy with fault tolerant Ivy with more than 1 fault.
+
+For this comparison we will use the performance of fault tolerant Ivy with no faults as the baseline.
+
+Fault Tolerant Ivy with more than 1 Fault in Primary CM and Restart
+
+Benchmarking Results
+
+1 Node, 10 Docs : 0.53 seconds
+2 Node, 10 Docs : 0.96 seconds
+3 Node, 10 Docs : 1.29 seconds
+4 Node, 10 Docs : 1.73 seconds
+5 Node, 10 Docs : 1.92 seconds
+6 Node, 10 Docs : 2.19 seconds
+7 Node, 10 Docs : 2.56 seconds
+8 Node, 10 Docs : 2.98 seconds
+9 Node, 10 Docs : 3.35 seconds
+10 Node, 10 Docs : 3.84 seconds
+
+q7. Performance Comparison between Non Fault Tolerant Ivy and Fault Tolerant Ivy with more than 1 Fault in Primary CM and Backup CM and Restart
+
+It will not be fair to compare the performance of non fault tolerant Ivy with fault tolerant Ivy with more than 1 fault.
+
+For this comparison we will use the performance of fault tolerant Ivy with no faults as the baseline.
+
+Fault Tolerant Ivy with more than 1 Fault in Primary CM and Backup CM and Restart
+
+Benchmarking Results
+
+1 Node, 10 Docs : 0.72 seconds
+2 Node, 10 Docs : 1.18 seconds
+3 Node, 10 Docs : 1.39 seconds
+4 Node, 10 Docs : 1.78 seconds
+5 Node, 10 Docs : 2.10 seconds
+6 Node, 10 Docs : 2.45 seconds
+7 Node, 10 Docs : 2.98 seconds
+8 Node, 10 Docs : 2.98 seconds
+9 Node, 10 Docs : 3.59 seconds
+10 Node, 10 Docs : 3.78 seconds
+
+
