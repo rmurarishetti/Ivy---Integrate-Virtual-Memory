@@ -537,6 +537,7 @@ func main() {
 	}
 	wg.Wait()
 	end := time.Now()
+	fmt.Printf("**************************************************\n CONCLUSION  \n**************************************************\n")
 	cm.PrintState()
 	time.Sleep(time.Second * 1)
 	fmt.Printf("Time taken = %.2f seconds \n", end.Sub(start).Seconds())

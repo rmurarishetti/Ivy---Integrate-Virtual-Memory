@@ -49,6 +49,9 @@ Instructions: The Program will be fully Automated, just watch the messages log t
 > [Node 3] Sending Message of type WRITEACK to CM
 > [CM] Recieved Message of type WRITEACK from Node 3
 **************************************************
+ CONCLUSION  
+**************************************************
+**************************************************
   CENTRAL MANAGER STATE  
 **************************************************
 > Page: 1, Owner: 1 :: Access Type: READWRITE , Copies: []
