@@ -10,6 +10,9 @@ import (
 const TOTAL_NODES int = 10
 const TOTAL_DOCS int = 10
 
+/*
+Struct to Construct a Central Manager Instance
+*/
 type CentralManager struct {
 	nodes       map[int]*Node
 	cmWaitGroup *sync.WaitGroup
@@ -19,6 +22,9 @@ type CentralManager struct {
 	msgRes      chan Message
 }
 
+/*
+Struct to Construct a Node Instance
+*/
 type Node struct {
 	id            int
 	cm            *CentralManager
@@ -31,6 +37,9 @@ type Node struct {
 	msgRes        chan Message
 }
 
+/*
+Struct to Construct a Message that's passed between Nodes and CM
+*/
 type Message struct {
 	senderId    int
 	requesterId int
@@ -39,6 +48,9 @@ type Message struct {
 	content     string
 }
 
+/*
+Message Type Enum to distinguish types of Messages
+*/
 type MessageType int
 
 const (
@@ -59,6 +71,9 @@ const (
 	WRITEPG
 )
 
+/*
+Permission Enum for READWRITE/READONLY
+*/
 type Permission int
 
 const (
@@ -90,6 +105,43 @@ func (p Permission) String() string {
 	}[p]
 }
 
+/*
+Function to Construct a New Node for the Ivy Protocol
+*/
+func NewNode(id int, cm CentralManager) *Node {
+	node := Node{
+		id:            id,
+		cm:            &cm,
+		nodes:         make(map[int]*Node),
+		nodeWaitGroup: &sync.WaitGroup{},
+		pgAccess:      make(map[int]Permission),
+		pgContent:     make(map[int]string),
+		writeToPg:     "",
+		msgReq:        make(chan Message),
+		msgRes:        make(chan Message),
+	}
+
+	return &node
+}
+
+/*
+Function to Construct a New Central Manager for the Ivy Protocol
+*/
+func NewCM() *CentralManager {
+	cm := CentralManager{
+		nodes:       make(map[int]*Node),
+		cmWaitGroup: &sync.WaitGroup{},
+		pgOwner:     make(map[int]int),
+		pgCopies:    make(map[int][]int),
+		msgReq:      make(chan Message),
+		msgRes:      make(chan Message),
+	}
+	return &cm
+}
+
+/*
+Function to Check if a given ID is part of an Array
+*/
 func inArray(id int, array []int) bool {
 	for _, item := range array {
 		if item == id {
@@ -99,6 +151,9 @@ func inArray(id int, array []int) bool {
 	return false
 }
 
+/*
+Function to Construct a Message that's passed between Nodes and CM
+*/
 func createMessage(msgType MessageType, senderId int, requesterId int, page int, content string) *Message {
 	msg := Message{
 		msgType:     msgType,
@@ -111,6 +166,9 @@ func createMessage(msgType MessageType, senderId int, requesterId int, page int,
 	return &msg
 }
 
+/*
+Function to Print the State of a Central Manager
+*/
 func (cm *CentralManager) PrintState() {
 	fmt.Printf("**************************************************\n  CENTRAL MANAGER STATE  \n**************************************************\n")
 	for page, owner := range cm.pgOwner {
@@ -118,6 +176,9 @@ func (cm *CentralManager) PrintState() {
 	}
 }
 
+/*
+Function to send a Message that's passed between Nodes and CM
+*/
 func (cm *CentralManager) sendMessage(msg Message, recieverId int) {
 	fmt.Printf("> [CM] Sending Message of type %s to Node %d\n", msg.msgType, recieverId)
 	networkDelay := rand.Intn(50)
@@ -131,6 +192,9 @@ func (cm *CentralManager) sendMessage(msg Message, recieverId int) {
 	}
 }
 
+/*
+Function to handle Incoming Read Request Msgs at CM
+*/
 func (cm *CentralManager) handleReadReq(msg Message) {
 	page := msg.page
 	requesterId := msg.requesterId
@@ -159,6 +223,9 @@ func (cm *CentralManager) handleReadReq(msg Message) {
 	cm.cmWaitGroup.Done()
 }
 
+/*
+Function to handle Incoming Write Request Msgs at CM
+*/
 func (cm *CentralManager) handleWriteReq(msg Message) {
 	page := msg.page
 	requesterId := msg.requesterId
@@ -198,6 +265,9 @@ func (cm *CentralManager) handleWriteReq(msg Message) {
 	cm.cmWaitGroup.Done()
 }
 
+/*
+Function to handle Incoming Msgs at CM
+*/
 func (cm *CentralManager) handleIncomingMessages() {
 	for {
 		reqMsg := <-cm.msgReq
@@ -211,6 +281,9 @@ func (cm *CentralManager) handleIncomingMessages() {
 	}
 }
 
+/*
+Function to send messages at Node
+*/
 func (node *Node) sendMessage(msg Message, recieverId int) {
 	if recieverId != 0 {
 		fmt.Printf("> [Node %d] Sending Message of type %s to Node %d\n", node.id, msg.msgType, recieverId)
@@ -230,6 +303,9 @@ func (node *Node) sendMessage(msg Message, recieverId int) {
 	}
 }
 
+/*
+Function to handle Read Forward Msgs at Node
+*/
 func (node *Node) handleReadFwd(msg Message) {
 	page := msg.page
 	requesterId := msg.requesterId
@@ -243,6 +319,9 @@ func (node *Node) handleReadFwd(msg Message) {
 	go node.sendMessage(*responseMsg, requesterId)
 }
 
+/*
+Function to handle Write Forward Msgs at Node
+*/
 func (node *Node) handleWriteFwd(msg Message) {
 	page := msg.page
 	requesterId := msg.requesterId
@@ -253,6 +332,9 @@ func (node *Node) handleWriteFwd(msg Message) {
 	go node.sendMessage(*responseMsg, requesterId)
 }
 
+/*
+Function to handle Invalidate Msgs at Node
+*/
 func (node *Node) handleInvalidate(msg Message) {
 	page := msg.page
 	delete(node.pgAccess, page)
@@ -262,6 +344,9 @@ func (node *Node) handleInvalidate(msg Message) {
 	go node.sendMessage(*responseMsg, 0)
 }
 
+/*
+Function to handle Read Owner Nil Msgs at Node
+*/
 func (node *Node) handleReadOwnerNil(msg Message) {
 	page := msg.page
 	fmt.Printf("> [Node %d] Recieved Message of type %s for Page %d\n", node.id, msg.msgType, page)
@@ -269,6 +354,9 @@ func (node *Node) handleReadOwnerNil(msg Message) {
 	go node.sendMessage(*responseMsg, 0)
 }
 
+/*
+Function to handle Write Owner Nil Msgs at Node
+*/
 func (node *Node) handleWriteOwnerNil(msg Message) {
 	page := msg.page
 	fmt.Printf("> [Node %d] Recieved Message of type %s for Page %d\n", node.id, msg.msgType, page)
@@ -281,6 +369,9 @@ func (node *Node) handleWriteOwnerNil(msg Message) {
 	go node.sendMessage(*responseMsg, 0)
 }
 
+/*
+Function to handle Read Page Msgs at Node
+*/
 func (node *Node) handleReadPg(msg Message) {
 	page := msg.page
 	content := msg.content
@@ -293,6 +384,9 @@ func (node *Node) handleReadPg(msg Message) {
 	go node.sendMessage(*responseMsg, 0)
 }
 
+/*
+Function to handle Write Page Msgs at Node
+*/
 func (node *Node) handleWritePg(msg Message) {
 	page := msg.page
 	content := msg.content
@@ -306,6 +400,9 @@ func (node *Node) handleWritePg(msg Message) {
 	go node.sendMessage(*responseMsg, 0)
 }
 
+/*
+Function to handle Incoming Msgs at Node
+*/
 func (node *Node) handleIncomingMessage() {
 	for {
 		msg := <-node.msgReq
@@ -321,6 +418,9 @@ func (node *Node) handleIncomingMessage() {
 	}
 }
 
+/*
+Function to perform a Read End to End at Node
+*/
 func (node *Node) executeRead(page int) {
 	node.nodeWaitGroup.Add(1)
 	if _, exists := node.pgAccess[page]; exists {
@@ -342,6 +442,9 @@ func (node *Node) executeRead(page int) {
 	}
 }
 
+/*
+Function to perform a write End to End at Node
+*/
 func (node *Node) executeWrite(page int, content string) {
 	node.nodeWaitGroup.Add(1)
 	if accessType, exists := node.pgAccess[page]; exists {
@@ -374,38 +477,10 @@ func (node *Node) executeWrite(page int, content string) {
 	}
 }
 
-func NewNode(id int, cm CentralManager) *Node {
-	node := Node{
-		id:            id,
-		cm:            &cm,
-		nodes:         make(map[int]*Node),
-		nodeWaitGroup: &sync.WaitGroup{},
-		pgAccess:      make(map[int]Permission),
-		pgContent:     make(map[int]string),
-		writeToPg:     "",
-		msgReq:        make(chan Message),
-		msgRes:        make(chan Message),
-	}
-
-	return &node
-}
-
-func NewCM() *CentralManager {
-	cm := CentralManager{
-		nodes:       make(map[int]*Node),
-		cmWaitGroup: &sync.WaitGroup{},
-		pgOwner:     make(map[int]int),
-		pgCopies:    make(map[int][]int),
-		msgReq:      make(chan Message),
-		msgRes:      make(chan Message),
-	}
-	return &cm
-}
-
 func main() {
 	var wg sync.WaitGroup
 
-	fmt.Printf("**************************************************\n  IVY PROTOCOL  \n**************************************************\n")
+	fmt.Printf("**************************************************\n  IVY PROTOCOL (AUTOMATED NO FAULT BENCHMARK)  \n**************************************************\n")
 	fmt.Printf("The network will have %d Nodes.\n", TOTAL_NODES)
 
 	fmt.Printf("\n\nThe program will start soon....\nInstructions: The Program will be fully Automated, just watch the messages log to understand the flow. \n\n")

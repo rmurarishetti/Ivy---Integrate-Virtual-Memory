@@ -11,6 +11,9 @@ import (
 const TOTAL_NODES int = 10
 const TOTAL_DOCS int = 10
 
+/*
+Struct to Construct a Central Manager Instance
+*/
 type CentralManager struct {
 	id          int
 	power       OfficeState
@@ -24,6 +27,9 @@ type CentralManager struct {
 	cmChan      chan MetaMsg
 }
 
+/*
+Struct to Construct a Node Instance
+*/
 type Node struct {
 	id            int
 	cm            *CentralManager
@@ -38,6 +44,9 @@ type Node struct {
 	cmKillChan    chan int
 }
 
+/*
+Struct to Construct a Message that's passed between Nodes and CM
+*/
 type Message struct {
 	senderId    int
 	requesterId int
@@ -46,6 +55,9 @@ type Message struct {
 	content     string
 }
 
+/*
+Struct to Construct a Message that's passed between Primary CM and Backup CM for Metadata Sync
+*/
 type MetaMsg struct {
 	senderId int
 	nodes    map[int]*Node
@@ -53,6 +65,9 @@ type MetaMsg struct {
 	pgCopies map[int][]int
 }
 
+/*
+Message Type Enum to distinguish types of Messages
+*/
 type MessageType int
 
 const (
@@ -73,6 +88,9 @@ const (
 	WRITEPG
 )
 
+/*
+Permission Enum for READWRITE/READONLY
+*/
 type Permission int
 
 const (
@@ -80,6 +98,9 @@ const (
 	READWRITE
 )
 
+/*
+OfficeState Enum for CM to be Self Aware if it is Current CM
+*/
 type OfficeState int
 
 const (
@@ -111,6 +132,49 @@ func (p Permission) String() string {
 	}[p]
 }
 
+/*
+Function to Construct a New Node for the Ivy Protocol
+*/
+func NewNode(id int, cm CentralManager, backup CentralManager) *Node {
+	node := Node{
+		id:            id,
+		cm:            &cm,
+		backup:        &backup,
+		nodes:         make(map[int]*Node),
+		nodeWaitGroup: &sync.WaitGroup{},
+		pgAccess:      make(map[int]Permission),
+		pgContent:     make(map[int]string),
+		writeToPg:     "",
+		msgReq:        make(chan Message),
+		msgRes:        make(chan Message),
+		cmKillChan:    make(chan int),
+	}
+
+	return &node
+}
+
+/*
+Function to Construct a New Central Manager for the Ivy Protocol
+*/
+func NewCM(id int, power OfficeState) *CentralManager {
+	cm := CentralManager{
+		id:          id,
+		power:       power,
+		nodes:       make(map[int]*Node),
+		cmWaitGroup: &sync.WaitGroup{},
+		pgOwner:     make(map[int]int),
+		pgCopies:    make(map[int][]int),
+		msgReq:      make(chan Message),
+		msgRes:      make(chan Message),
+		killChan:    make(chan int),
+		cmChan:      make(chan MetaMsg),
+	}
+	return &cm
+}
+
+/*
+Function to Check if a given ID is part of an Array
+*/
 func inArray(id int, array []int) bool {
 	for _, item := range array {
 		if item == id {
@@ -120,6 +184,9 @@ func inArray(id int, array []int) bool {
 	return false
 }
 
+/*
+Function to Construct a Message that's passed between Nodes and CM
+*/
 func createMessage(msgType MessageType, senderId int, requesterId int, page int, content string) *Message {
 	msg := Message{
 		msgType:     msgType,
@@ -132,6 +199,9 @@ func createMessage(msgType MessageType, senderId int, requesterId int, page int,
 	return &msg
 }
 
+/*
+Function to Print the State of a Central Manager
+*/
 func (cm *CentralManager) PrintState() {
 	fmt.Printf("**************************************************\n  CENTRAL MANAGER %d STATE \n**************************************************\n", cm.id)
 	for page, owner := range cm.pgOwner {
@@ -139,6 +209,9 @@ func (cm *CentralManager) PrintState() {
 	}
 }
 
+/*
+Function to send a Message that's passed between Nodes and CM
+*/
 func (cm *CentralManager) sendMessage(msg Message, recieverId int) {
 	fmt.Printf("> [CM %d] Sending Message of type %s to Node %d\n", cm.id, msg.msgType, recieverId)
 	networkDelay := rand.Intn(50)
@@ -152,6 +225,9 @@ func (cm *CentralManager) sendMessage(msg Message, recieverId int) {
 	}
 }
 
+/*
+Function to send a Meta Data Message that's passed Primary CM and Backup CM
+*/
 func (cm *CentralManager) sendMetaMessage(reciever *CentralManager) {
 	metaMsg := MetaMsg{
 		senderId: cm.id,
@@ -164,6 +240,9 @@ func (cm *CentralManager) sendMetaMessage(reciever *CentralManager) {
 	reciever.cmChan <- metaMsg
 }
 
+/*
+Function to handle Incoming Read Request Msgs at CM
+*/
 func (cm *CentralManager) handleReadReq(msg Message) {
 	page := msg.page
 	requesterId := msg.requesterId
@@ -192,6 +271,9 @@ func (cm *CentralManager) handleReadReq(msg Message) {
 	cm.cmWaitGroup.Done()
 }
 
+/*
+Function to handle Incoming Write Request Msgs at CM
+*/
 func (cm *CentralManager) handleWriteReq(msg Message) {
 	page := msg.page
 	requesterId := msg.requesterId
@@ -231,16 +313,20 @@ func (cm *CentralManager) handleWriteReq(msg Message) {
 	cm.cmWaitGroup.Done()
 }
 
-// New Function
+/*
+Function to handle Incoming Met Data Msgs at CM
+*/
 func (cm *CentralManager) handleMetaMsg(msg MetaMsg) {
-	// Sync the Data Attributes from the incoming Meta Message
 	cm.nodes = msg.nodes
 	cm.pgCopies = msg.pgCopies
 	cm.pgOwner = msg.pgOwner
 
-	fmt.Printf("> [Backup CM] Synced MetaMessage from Primary CM %d\n", msg.senderId)
+	fmt.Printf("> [CM %d] Synced MetaMessage from Incumbent CM %d\n", cm.id, msg.senderId)
 }
 
+/*
+Function to handle Incoming Msgs at CM
+*/
 func (cm *CentralManager) handleIncomingMessages() {
 	for {
 		select {
@@ -256,7 +342,7 @@ func (cm *CentralManager) handleIncomingMessages() {
 		case metaMsg := <-cm.cmChan:
 			//write code to handle
 			cm.power = OVERTHROWN
-			fmt.Printf("> [Backup CM %d] Recieved MetaMessage from Primary CM %d\n", cm.id, metaMsg.senderId)
+			fmt.Printf("> [CM %d] Recieved MetaMessage from Incumbent CM %d\n", cm.id, metaMsg.senderId)
 			cm.handleMetaMsg(metaMsg)
 		case <-cm.killChan:
 			cm.power = OVERTHROWN
@@ -266,6 +352,9 @@ func (cm *CentralManager) handleIncomingMessages() {
 	}
 }
 
+/*
+Function to send messages at Node
+*/
 func (node *Node) sendMessage(msg Message, recieverId int) {
 	if recieverId != 0 {
 		fmt.Printf("> [Node %d] Sending Message of type %s to Node %d\n", node.id, msg.msgType, recieverId)
@@ -285,6 +374,9 @@ func (node *Node) sendMessage(msg Message, recieverId int) {
 	}
 }
 
+/*
+Function to handle Read Forward Msgs at Node
+*/
 func (node *Node) handleReadFwd(msg Message) {
 	page := msg.page
 	requesterId := msg.requesterId
@@ -298,6 +390,9 @@ func (node *Node) handleReadFwd(msg Message) {
 	go node.sendMessage(*responseMsg, requesterId)
 }
 
+/*
+Function to handle Write Forward Msgs at Node
+*/
 func (node *Node) handleWriteFwd(msg Message) {
 	page := msg.page
 	requesterId := msg.requesterId
@@ -308,6 +403,9 @@ func (node *Node) handleWriteFwd(msg Message) {
 	go node.sendMessage(*responseMsg, requesterId)
 }
 
+/*
+Function to handle Invalidate Msgs at Node
+*/
 func (node *Node) handleInvalidate(msg Message) {
 	page := msg.page
 	delete(node.pgAccess, page)
@@ -317,6 +415,9 @@ func (node *Node) handleInvalidate(msg Message) {
 	go node.sendMessage(*responseMsg, 0)
 }
 
+/*
+Function to handle Read Owner Nil Msgs at Node
+*/
 func (node *Node) handleReadOwnerNil(msg Message) {
 	page := msg.page
 	fmt.Printf("> [Node %d] Recieved Message of type %s for Page %d\n", node.id, msg.msgType, page)
@@ -324,6 +425,9 @@ func (node *Node) handleReadOwnerNil(msg Message) {
 	go node.sendMessage(*responseMsg, 0)
 }
 
+/*
+Function to handle Write Owner Nil Msgs at Node
+*/
 func (node *Node) handleWriteOwnerNil(msg Message) {
 	page := msg.page
 	fmt.Printf("> [Node %d] Recieved Message of type %s for Page %d\n", node.id, msg.msgType, page)
@@ -336,6 +440,9 @@ func (node *Node) handleWriteOwnerNil(msg Message) {
 	go node.sendMessage(*responseMsg, 0)
 }
 
+/*
+Function to handle Read Page Msgs at Node
+*/
 func (node *Node) handleReadPg(msg Message) {
 	page := msg.page
 	content := msg.content
@@ -348,6 +455,9 @@ func (node *Node) handleReadPg(msg Message) {
 	go node.sendMessage(*responseMsg, 0)
 }
 
+/*
+Function to handle Write Page Msgs at Node
+*/
 func (node *Node) handleWritePg(msg Message) {
 	page := msg.page
 	content := msg.content
@@ -361,9 +471,9 @@ func (node *Node) handleWritePg(msg Message) {
 	go node.sendMessage(*responseMsg, 0)
 }
 
-//handle killing func
-
-// Edit
+/*
+Function to handle Incoming Msgs at Node
+*/
 func (node *Node) handleIncomingMessage() {
 	for {
 		select {
@@ -380,16 +490,19 @@ func (node *Node) handleIncomingMessage() {
 
 		case <-node.cmKillChan:
 			//handle killing of cm, swap primary and backup with each other
-			fmt.Printf("> [Node %d] has been notified of the Supreme Leader %d's death\n", node.id, node.cm.id)
+			fmt.Printf("> [Node %d] has been notified of the CM %d's death\n", node.id, node.cm.id)
 			temp := node.backup
 			node.backup = node.cm
 			node.cm = temp
-			fmt.Printf("> [Node %d] has accepted the new Supreme Leader %d\n", node.id, node.cm.id)
+			fmt.Printf("> [Node %d] has accepted the new CM %d as Incumbent\n", node.id, node.cm.id)
 		}
 
 	}
 }
 
+/*
+Function to perform a Read End to End at Node
+*/
 func (node *Node) executeRead(page int) {
 	node.nodeWaitGroup.Add(1)
 	if _, exists := node.pgAccess[page]; exists {
@@ -411,6 +524,9 @@ func (node *Node) executeRead(page int) {
 	}
 }
 
+/*
+Function to perform a write End to End at Node
+*/
 func (node *Node) executeWrite(page int, content string) {
 	node.nodeWaitGroup.Add(1)
 	if accessType, exists := node.pgAccess[page]; exists {
@@ -443,54 +559,24 @@ func (node *Node) executeWrite(page int, content string) {
 	}
 }
 
-func NewNode(id int, cm CentralManager, backup CentralManager) *Node {
-	node := Node{
-		id:            id,
-		cm:            &cm,
-		backup:        &backup,
-		nodes:         make(map[int]*Node),
-		nodeWaitGroup: &sync.WaitGroup{},
-		pgAccess:      make(map[int]Permission),
-		pgContent:     make(map[int]string),
-		writeToPg:     "",
-		msgReq:        make(chan Message),
-		msgRes:        make(chan Message),
-		cmKillChan:    make(chan int),
-	}
-
-	return &node
-}
-
-func NewCM(id int, power OfficeState) *CentralManager {
-	cm := CentralManager{
-		id:          id,
-		power:       power,
-		nodes:       make(map[int]*Node),
-		cmWaitGroup: &sync.WaitGroup{},
-		pgOwner:     make(map[int]int),
-		pgCopies:    make(map[int][]int),
-		msgReq:      make(chan Message),
-		msgRes:      make(chan Message),
-		killChan:    make(chan int),
-		cmChan:      make(chan MetaMsg),
-	}
-	return &cm
-}
-
+/*
+Function to communicate Meta Data Message from Incumbent to Backup CM periodically
+*/
 func (cm *CentralManager) periodicFunction(reciever *CentralManager) {
 	for {
-		// Your periodic task goes here
-		//fmt.Println("Executing periodic task...")
 		if cm.power == INCUMBENT {
 			cm.sendMetaMessage(reciever)
 		} else {
 			fmt.Printf("> [CM %d] Waiting for MetaMsg from Incumbent CM %d\n", cm.id, reciever.id)
 		}
 
-		time.Sleep(100 * time.Millisecond) // Adjust the duration as needed
+		time.Sleep(100 * time.Millisecond)
 	}
 }
 
+/*
+Function to Run Baseline Benchmark (2 reads, 2 writes)
+*/
 func baselineBenchmark(nodeMap map[int]*Node, cm CentralManager, backupCM CentralManager, wg sync.WaitGroup) {
 
 	start := time.Now()
@@ -529,6 +615,7 @@ func main() {
 
 	fmt.Printf("**************************************************\n FAULT TOLERANT IVY PROTOCOL  \n**************************************************\n")
 	fmt.Printf("The network will have %d Nodes.\n", TOTAL_NODES)
+	fmt.Printf("The network will have 2 CMs, CM 0 is Primary and CM 1 is a Backup.\n")
 
 	fmt.Printf("\n\nThe program will start soon....\nInstructions:\n\nType 1 and Hit ENTER to Simulate BASELINE FAULT FREE BENCHMARK\nor 2 and Hit ENTER to Simulate PRIMARY CM FAULT (DEAD) BENCHMARK\nor 3 and Hit ENTER to PRIMARY CM FAULT (DEAD AND RESTART) BENCHMARK\nor 4 and Hit ENTER to Simulate a MULTIPLE PRIMARY CM FAULT (DEAD AND RESTART) BENCHMARK\nor 5 and Hit ENTER to Simulate a MULTIPLE PRIMARY CM AND BACKUP CM FAULT (DEAD AND RESTART) BENCHMARK\nor Type EXIT and Hit ENTER to exit...\n\n")
 
@@ -657,7 +744,7 @@ func main() {
 				// Make Dead CM relive by listening to msgs again
 				go cm.handleIncomingMessages()
 
-				fmt.Printf("**************************************************\n KILLING BACKUP CM AND RESTARTING PRIMARY CM \n**************************************************\n")
+				fmt.Printf("**************************************************\n REVIVNG PRIMARY CM \n**************************************************\n")
 				backupCM.killChan <- 1
 				cm.PrintState()
 				for _, node := range nodeMap {
@@ -722,7 +809,7 @@ func main() {
 				// Make Dead CM relive by listening to msgs again
 				go cm.handleIncomingMessages()
 
-				fmt.Printf("**************************************************\n KILLING BACKUP CM AND RESTARTING PRIMARY CM \n**************************************************\n")
+				fmt.Printf("**************************************************\n REVIVING PRIMARY CM \n**************************************************\n")
 				backupCM.killChan <- 1
 				cm.PrintState()
 				for _, node := range nodeMap {
@@ -800,7 +887,7 @@ func main() {
 				// Make Dead CM relive by listening to msgs again
 				go cm.handleIncomingMessages()
 
-				fmt.Printf("**************************************************\n KILLING BACKUP CM AND RESTARTING PRIMARY CM  \n**************************************************\n")
+				fmt.Printf("**************************************************\n REVIVING PRIMARY CM  \n**************************************************\n")
 				backupCM.killChan <- 1
 				cm.PrintState()
 				for _, node := range nodeMap {
@@ -832,7 +919,7 @@ func main() {
 				// Make Dead CM relive by listening to msgs again
 				go cm.handleIncomingMessages()
 
-				fmt.Printf("**************************************************\n  KILLING BACKUP CM AND RESTARTING PRIMARY CM AGAIN \n**************************************************\n")
+				fmt.Printf("**************************************************\n  KILLING BACKUP CM AND REVIVING PRIMARY CM AGAIN \n**************************************************\n")
 				backupCM.killChan <- 1
 				cm.PrintState()
 				for _, node := range nodeMap {
@@ -870,63 +957,5 @@ func main() {
 		}
 	}
 	fmt.Scanf("%s", &random)
-	//cm.PrintState()
-	//wg.Wait()
-	//end := time.Now()
-	//cm.PrintState()
-	//time.Sleep(time.Second * 1)
-	//fmt.Printf("Time taken = %.2f seconds \n", end.Sub(start).Seconds())
 
 }
-
-// go func() {
-
-// 	// Your main program logic goes here
-
-// 	// TESTING
-// 	nodeMap[2].executeRead(3)
-// 	nodeMap[1].executeWrite(3, "This is written by pid 1")
-// 	nodeMap[3].executeRead(3)
-// 	nodeMap[2].executeRead(3)
-// 	nodeMap[4].executeWrite(3, "This is written by pid 4")
-// 	fmt.Printf("**************************************************\n KILLING PRIMARY 0  \n**************************************************\n")
-// 	cm.killChan <- 1
-// 	for _, node := range nodeMap {
-// 		node.cmKillChan <- 1
-// 	}
-// 	time.Sleep(100 * time.Millisecond)
-// 	// Make CM Realise its no longer Incumbent
-// 	go cm.periodicFunction(backupCM)
-// 	// Make Dead CM relive by listening to msgs again
-// 	go cm.handleIncomingMessages()
-
-// 	nodeMap[1].executeRead(3)
-// 	nodeMap[9].executeWrite(3, "This is written by pid 9")
-// 	nodeMap[5].executeRead(3)
-// 	fmt.Printf("**************************************************\n KILLING PRIMARY 1  \n**************************************************\n")
-// 	backupCM.killChan <- 1
-// 	cm.PrintState()
-// 	for _, node := range nodeMap {
-// 		node.cmKillChan <- 1
-// 	}
-// 	time.Sleep(100 * time.Millisecond)
-// 	// Make Backup CM Realise its no longer Incumbent
-// 	go backupCM.periodicFunction(cm)
-// 	// Make Dead Backup CM relive by listening to msgs again
-// 	go backupCM.handleIncomingMessages()
-
-// 	nodeMap[2].executeRead(3)
-// 	nodeMap[3].executeRead(3)
-// 	nodeMap[1].executeWrite(3, "This is written by pid 1")
-// 	nodeMap[5].executeRead(3)
-// 	nodeMap[3].executeRead(3)
-// 	nodeMap[8].executeRead(3)
-// 	nodeMap[6].executeRead(3)
-// 	fmt.Println("Reached this line now")
-// 	nodeMap[9].executeRead(3)
-// 	wg.Wait()
-// 	fmt.Printf("**************************************************\n CONCLUSION  \n**************************************************\n")
-// 	cm.PrintState()
-// 	backupCM.PrintState()
-
-// }()
